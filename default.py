@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from traceback import format_exc
 from urlparse import urlparse, parse_qs
+from subprocess import Popen
 
 import StorageServer
 from BeautifulSoup import BeautifulSoup, BeautifulStoneSoup
@@ -27,8 +28,10 @@ fanart = addon.getAddonInfo('fanart')
 cache = StorageServer.StorageServer("theblaze", 24)
 base_url = 'http://www.video.theblaze.com'
 cookie_file = os.path.join(addon_profile, 'cookie_file')
+vid_cache = os.path.join(addon_profile, 'vid.tscache')
 cookie_jar = cookielib.LWPCookieJar(cookie_file)
 language = addon.getLocalizedString
+p_task = None
 
 
 def addon_log(string):
@@ -139,7 +142,9 @@ def display_show(show_url):
 
     
 def parse_video_search(search_url):
-    data = json.loads(make_request(search_url))
+    x = make_request(search_url)
+    x = x.decode('utf-8', 'ignore').encode('utf-8')
+    data = json.loads(x)
     videos = []
     if data.has_key('mediaContent'):
         for i in data['mediaContent']:
@@ -151,9 +156,12 @@ def parse_video_search(search_url):
                 if t['type'] == '1000' or t['type'] == '13':
                     thumb = t['src']
                     break
-            if thumb is None and i['thumbnails']:
-                thumb = i['thumbnails'][0]['src']
-            if thumb and not thumb.startswith('http'):
+            if thumb is None:
+                try:
+                    thumb = i['thumbnails'][0]['src']
+                except:
+                    thumb = icon
+            if not thumb.startswith('http'):
                 thumb = base_url + thumb
             info['title'] = i['blurb']
             if i.has_key('bigBlurb') and i['bigBlurb']:
@@ -168,7 +176,6 @@ def parse_video_search(search_url):
                         break
             videos.append((info, xml_url, thumb, item_ids))
     return videos
-    
 
 def display_show_list(name):
     if 'highlights' in name:
@@ -428,8 +435,9 @@ def resolve_prem_url(ids_dict, retry=False):
     scenarios = [i('playback-scenario')[0].string for i in soup('media-item') if
             i('playback-scenario') and i('playback-scenario')[0].string and
                 i.find('cdn-name')]
-    if 'FMS_CLOUD' in scenarios:
-        playback_scenario = 'FMS_CLOUD'
+
+    if 'HTTP_CLOUD_WIRED' in scenarios:
+        playback_scenario = 'HTTP_CLOUD_WIRED'
     elif senario_types[preffered_scenario] in scenarios:
         playback_scenario = senario_types[preffered_scenario]
     else:
@@ -479,7 +487,11 @@ def resolve_prem_url(ids_dict, retry=False):
             addon_log(format_exc())
             notify('Unknown Error - Check Log')
             return
-    # if playback_scenario == 'HTTP_CLOUD_WIRED':
+    if playback_scenario == 'HTTP_CLOUD_WIRED':
+        # ptask = Popen(['mlbhls', '-B', stream_url, '-b', '3000000', '-m', '3000000', '-o', vid_cache])
+        ptask = Popen(['mlbhls', '-B', stream_url, '-o', vid_cache])
+        time.sleep(5)
+        return vid_cache
         # hls = base64.decodestring(stream_url)
         # addon_log('HLS URL: %s' %hls)
     # else:
